@@ -2,8 +2,10 @@ library(car)
 library(MASS)
 library(ggplot2)
 #
-# Statistical analysis of the influence of ER, ST, TEA, AI and NRC [explanation below] on the number of
+# Statistical analysis of the influence of ST, TEA, AI and NRC [explanation below] on the number of
 # campaigns
+#
+# use only countries which finished the OIF
 #
 # List of Acronyms
 #
@@ -25,17 +27,7 @@ library(ggplot2)
 #
 data <- read.table(file="/Users/tselhorst/Desktop/OIF/data.txt", header=TRUE, sep="\t")
 attach(data)
-data
-#
-# Summary description of data
-#
-tapply(Y, ER, summary)
-tapply(ST, ER, summary)
-tapply(TEA, ER, summary)
-tapply(AI, ER, summary)
-tapply(NRC, ER, summary)
-tapply(BL, ER, summary)
-tapply(SVA, ER, summary)
+data <- subset(data, ER=="finished")
 #
 # Correlatons and correlation matrix plot
 #
@@ -54,13 +46,12 @@ scatterplotMatrix(~Y+AI+TEA+BL+log(SVA)+log(ST)+log(NRC) | ER, reg.line=FALSE, s
 #
 # Parameters of the model are:
 #   Y   : number of OIF campaigns
-#   ER  : eradication status (finished | not finished)
 #   TEA : territory ever affected (proportion)
 #   AI  : area index
 #   SVA : size of vaccination areq <== element within the calc of AI
 #
 #
-model.nb <- glm.nb(Y ~ (log(SVA) + ER + TEA + AI), data = data)
+model.nb <- glm.nb(Y ~ (TEA + AI), data = data)
 model.nb.step <- stepAIC(model.nb, direction="backward")
 model.nb.step$anova
 summary(model.nb.step)
@@ -77,7 +68,7 @@ with(model.nb.step.2, cbind(res.deviance = deviance, df=df.residual, p = pchisq(
 # setup a poission regression model with is nested in the negative binomial model and assuming that the disperion parameter is
 # constant.
 #
-model.poi <- glm(Y ~ (log(SVA) + ER + TEA + AI), family = poisson, data = data)
+model.poi <- glm(Y ~ (log(SVA) + TEA + AI), family = poisson, data = data)
 summary(model.poi)
 model.poi.step = stepAIC(model.poi, direction="backward")
 model.poi.step$anova
