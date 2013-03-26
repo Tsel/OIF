@@ -27,7 +27,7 @@ library(ggplot2)
 #
 data <- read.table(file="/Users/tselhorst/Desktop/OIF/data.txt", header=TRUE, sep="\t")
 attach(data)
-data <- subset(data, ER=="finished")
+#data <- subset(data, ER=="finished")
 #
 # Correlatons and correlation matrix plot
 #
@@ -49,10 +49,10 @@ scatterplotMatrix(~Y+AI+TEA+BL+log(SVA)+log(ST)+log(NRC) | ER, reg.line=FALSE, s
 #   TEA : territory ever affected (proportion)
 #   AI  : area index
 #   SVA : size of vaccination areq <== element within the calc of AI
+#   ER  : eradication status as factor
 #
-#
-model.nb <- glm.nb(Y ~ (TEA + AI), data = data)
-model.nb.step <- stepAIC(model.nb, direction="backward")
+model.nb <- glm.nb(Y ~ TEA + AI + log(SVA) + as.factor(ER), data = data)
+model.nb.step <- stepAIC(model.nb, direction="both")
 model.nb.step$anova
 summary(model.nb.step)
 with(model.nb.step, cbind(res.deviance = deviance, df=df.residual, p = pchisq(deviance, df.residual, lower.tail=FALSE)))
@@ -68,9 +68,9 @@ with(model.nb.step.2, cbind(res.deviance = deviance, df=df.residual, p = pchisq(
 # setup a poission regression model with is nested in the negative binomial model and assuming that the disperion parameter is
 # constant.
 #
-model.poi <- glm(Y ~ (log(SVA) + TEA + AI), family = poisson, data = data)
+model.poi <- glm(Y ~ (log(SVA) + TEA + AI+as.factor(ER)), family = poisson, data = data)
 summary(model.poi)
-model.poi.step = stepAIC(model.poi, direction="backward")
+model.poi.step = stepAIC(model.poi, direction="both")
 model.poi.step$anova
 summary(model.poi.step)
 #
@@ -91,6 +91,12 @@ pchisq(chi, df = 1, lower.tail = FALSE)
 est <- cbind(Estimate=coef(model.nb.step.2), confint(model.nb.step.2))
 est
 #
+# Estimates for the effect of TEA when AI and SVA is set to the median values.
+TEA.effect <- data.frame(AI=median(data$AI), SVA = median(data$SVA), TEA=seq(0.1,1.0,
+                                                                             length=2))
+TEA.effect$phat <- predict(model.nb.step.2,TEA.effect, type="response")
+TEA.effect
+#
 #######################
 # Grafical representation of the reslts
 #######################
@@ -103,22 +109,24 @@ z2 <- seq(min(TEA),max(TEA),length=3)
 # create a grid
 grid.data <- expand.grid(AI=z1,TEA=z2)
 grid.data$SVA <- median(SVA)
-grid.data <- cbind(grid.data, predict(model.nb.step.2, grid.data, type="response", se.fit=TRUE))
+grid.data <- cbind(grid.data, predict(model.nb.step.2, grid.data, type="link", se.fit=TRUE))
 grid.data <- within(grid.data, {
-  LL <- fit-1.96*se.fit
-  UL <- fit+1.96*se.fit
+  CN <- exp(fit)
+  LL <- exp(fit-1.96*se.fit)
+  UL <- exp(fit+1.96*se.fit)
 })
 #
 cp <- c("blue","goldenrod","indianred")
-ggplot(grid.data, aes(AI, fit, color=factor(TEA)))+
+ggplot(grid.data, aes(AI, CN, color=factor(TEA)))+
   geom_ribbon(aes(ymin=LL, ymax=UL, fill=factor(TEA)),alpha=0.2)+
   geom_line(aes(color=factor(TEA)),size=1)+
   labs(x="Area Index",y="OIF campaigns")+
   scale_colour_manual(values=cp,name="TEA",guide="none")+
   scale_fill_manual(values=cp,name="TEA")+
-  geom_point(data=data, aes(AI, Y), color="black")+
+  geom_point(data=data, aes(AI, Y), color="black", shape = ER, size=3)+
   annotate("text", label="SVA=60056.5",x=0.75,y=100)
 #
+
 # graphical respresentation of the effect of SVA
 #
 sva <- seq(min(SVA),max(SVA),length=1000)
@@ -128,14 +136,15 @@ df.sva$TEA <- median(TEA)
 names(df.sva)
 #is.data.frame(df.sva)
 #pred <- predict(model.nb.step.2, df.sva, type="response", se.fit=TRUE)
-df.sva <- cbind(df.sva, predict(model.nb.step.2, df.sva, type="response", se.fit=TRUE))
+df.sva <- cbind(df.sva, predict(model.nb.step.2, df.sva, type="link", se.fit=TRUE))
 df.sva <- within(df.sva, {
-  LL <- fit-1.96*se.fit
-  UL <- fit+1.96*se.fit
+  esva <- exp(fit)
+  LL <- exp(fit-1.96*se.fit)
+  UL <- exp(fit+1.96*se.fit)
 })
 #
-ggplot(df.sva, aes(SVA, fit), color="blue")+
+ggplot(df.sva, aes(SVA, esva), color="blue")+
   geom_ribbon(aes(ymin=LL,ymax=UL), color="blue", alpha=0.2)+
   geom_line(aes(),color="blue", size=1)+
-  labs(x="size of vaccinated area [SVA]", y="OIF campaigns")+
-  geom_point(data=data, aes(SVA, Y), color="black")
+  labs(x="size of vaccinated area [SVA]", y="OIF campaigns") #+
+  #geom_point(data=data, aes(SVA, Y), shape=ER, color="black",size=3)
